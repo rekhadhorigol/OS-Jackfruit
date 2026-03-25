@@ -353,7 +353,27 @@ int bounded_buffer_pop(bounded_buffer_t *buffer, log_item_t *item)
  */
 void *logging_thread(void *arg)
 {
-    (void)arg;
+    supervisor_ctx_t *ctx = (supervisor_ctx_t *)arg;
+    log_item_t item;
+
+    while (1) {
+        if (bounded_buffer_pop(&ctx->log_buffer, &item) != 0) {
+            break; // shutdown
+        }
+
+        char path[PATH_MAX];
+        snprintf(path, sizeof(path), "%s/%s.log", LOG_DIR, item.container_id);
+
+        FILE *fp = fopen(path, "a");
+        if (!fp) {
+            perror("fopen");
+            continue;
+        }
+
+        fwrite(item.data, 1, item.length, fp);
+        fclose(fp);
+    }
+
     return NULL;
 }
 
