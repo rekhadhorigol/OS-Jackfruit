@@ -471,7 +471,22 @@ static int run_supervisor(const char *rootfs)
      *   4) spawn the logger thread
      *   5) enter the supervisor event loop
      */
-    fprintf(stderr, "Supervisor mode not implemented yet for base-rootfs: %s\n", rootfs);
+    // Create logs directory
+    mkdir(LOG_DIR, 0755);
+
+    // Start logging thread
+    if (pthread_create(&ctx.log_thread, NULL, logging_thread, &ctx) != 0) {
+        perror("pthread_create");
+        bounded_buffer_destroy(&ctx.log_buffer);
+        pthread_mutex_destroy(&ctx.metadata_lock);
+        return 1;
+    }
+    printf("Supervisor running with rootfs: %s\n", rootfs);
+
+    // Keep supervisor alive (event loop placeholder)
+    while (1) {
+        sleep(1);
+    }
 
     bounded_buffer_begin_shutdown(&ctx.log_buffer);
     bounded_buffer_destroy(&ctx.log_buffer);
