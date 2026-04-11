@@ -16,8 +16,8 @@ modules.order
 Module.symvers
 
 # Temp/runtime files
-host_pid
-id
+host_pid,
+id,
 next
 
 # Logs
