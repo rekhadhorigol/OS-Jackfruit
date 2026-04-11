@@ -1,1 +1,14 @@
 solved
+
+engine
+*.o
+
+
+logs/
+
+
+*.tmp
+*.log
+
+
+.DS_Store
