@@ -1,12 +1,27 @@
+# Binaries
 engine
+cpu_hog
+memory_hog
+io_pulse
+
+# Object files
 *.o
 
+# Kernel module build files
+*.ko
+*.mod
+*.mod.c
+*.cmd
+modules.order
+Module.symvers
 
-logs/
+# Temp/runtime files
+host_pid
+id
+next
 
-
-*.tmp
+# Logs
 *.log
 
-
+# OS files
 .DS_Store
