@@ -25,3 +25,7 @@ next
 
 # OS files
 .DS_Store
+
+# Rootfs
+rootfs/
+rootfs*/
