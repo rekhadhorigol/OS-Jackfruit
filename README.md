@@ -1,15 +1,6 @@
-# Multi-Container Runtime — Project Submission
+# Multi-Container Runtime
 
-## 1. Team Information
-
-| Name | SRN |
-|------|-----|
-| Rekha Dhorigol | [PES1UG24CS370] |
-| [Rushil Singh Arora] | [PES1UG24CS389] |
-
----
-
-## 2. Build, Load, and Run Instructions
+## Build, Load, and Run Instructions
 
 ### Prerequisites
 
@@ -124,62 +115,22 @@ dmesg | tail -3   # should show "container_monitor: unloaded"
 ps aux | grep defunct
 ```
 
----
 
-## 3. Demo Screenshots
+## Engineering Analysis
 
-> **Screenshot 1 — Multi-container supervision**
-> Two containers (c1, c2) running concurrently under one supervisor process.
-> *(Add annotated screenshot here)*
-
-> **Screenshot 2 — Metadata tracking (`ps`)**
-> Output of `./engine ps` showing ID, PID, STATE, and STARTED columns for both containers.
-> *(Add annotated screenshot here)*
-
-> **Screenshot 3 — Bounded-buffer logging**
-> Contents of `logs/c1.log` captured through the pipe → bounded buffer → file pipeline.
-> *(Add annotated screenshot here)*
-
-> **Screenshot 4 — CLI and IPC**
-> A `./engine stop c1` command being issued and the supervisor printing the confirmation,
-> demonstrating the UNIX socket control channel.
-> *(Add annotated screenshot here)*
-
-> **Screenshot 5 — Soft-limit warning**
-> `dmesg` output showing `SOFT LIMIT: 'memtest' pid=... rss=...KB limit=...KB`.
-> *(Add annotated screenshot here)*
-
-> **Screenshot 6 — Hard-limit enforcement**
-> `dmesg` showing `HARD LIMIT: 'memtest' ...` followed by `./engine ps` showing
-> state changed to `killed`.
-> *(Add annotated screenshot here)*
-
-> **Screenshot 7 — Scheduling experiment**
-> Side-by-side `logs/cpu_hi.log` vs `logs/cpu_lo.log` showing different elapsed
-> times under different nice values.
-> *(Add annotated screenshot here)*
-
-> **Screenshot 8 — Clean teardown**
-> Supervisor shutdown messages followed by `ps aux | grep defunct` showing no zombies.
-> *(Add annotated screenshot here)*
-
----
-
-## 4. Engineering Analysis
-
-### 4.1 Isolation Mechanisms
+### Isolation Mechanisms
 
 The runtime uses Linux namespaces to isolate each container from the host and from each other. `clone()` is called with three flags: `CLONE_NEWPID` creates a new PID namespace so the container's first process sees itself as PID 1 and cannot directly signal host processes; `CLONE_NEWUTS` gives the container its own hostname so `sethostname()` inside the child does not affect the host; `CLONE_NEWNS` creates a new mount namespace so `mount()` calls (such as mounting `/proc`) are private and invisible to the host.
 
 `chroot()` confines the container's filesystem view to its own Alpine rootfs. This is not true pivot\_root isolation, but it is sufficient for the project scope. The host kernel is still shared: system calls go through the same kernel, the same network stack is used (no network namespace), and the host can still see all container PIDs from outside using their host PID.
 
-### 4.2 Supervisor and Process Lifecycle
+### Supervisor and Process Lifecycle
 
 A long-running supervisor is necessary because containers are child processes of the supervisor. If the supervisor exited immediately, orphaned children would be re-parented to `init` and their metadata (PID, state, log paths) would be lost. The supervisor stays alive in an `accept()` loop, owning all container state.
 
 When `clone()` creates a container, the parent records the returned host PID in a linked list entry. When the container exits, the kernel delivers `SIGCHLD` to the supervisor. The `sigchld_handler` calls `waitpid(-1, &status, WNOHANG)` in a loop to reap all exited children without blocking, marks the matching metadata record as `CONTAINER_EXITED` or `CONTAINER_KILLED`, and calls `ioctl(MONITOR_UNREGISTER)` to remove the entry from the kernel list. Without `waitpid()`, exited children would remain as zombies indefinitely.
 
-### 4.3 IPC, Threads, and Synchronization
+### IPC, Threads, and Synchronization
 
 Two IPC mechanisms are used. The logging path uses **pipes**: each container's stdout and stderr are redirected to the write end of a pipe via `dup2()`. The supervisor reads from the read end in a dedicated pipe-reader thread per container, producing log chunks into the bounded buffer. The control path uses a **UNIX domain socket**: the supervisor binds `/tmp/mini_runtime.sock` and listens; CLI commands connect, send a `control_request_t` struct, and read back a `control_response_t`. This satisfies the requirement for a second IPC mechanism distinct from the logging pipe.
 
@@ -187,7 +138,7 @@ The **bounded buffer** is a circular array of `log_item_t` structs with capacity
 
 The **container linked list** is protected by `metadata_lock`. This mutex is separate from the buffer mutex because list operations (start, stop, ps, SIGCHLD updates) and logging are independent; merging them into one lock would create unnecessary serialisation.
 
-### 4.4 Memory Management and Enforcement
+### Memory Management and Enforcement
 
 RSS (Resident Set Size) measures the number of physical pages currently mapped into a process's address space, multiplied by `PAGE_SIZE`. It does not measure memory that has been allocated but not yet faulted in (demand paging), nor shared library pages counted multiple times across processes, nor swap usage.
 
@@ -195,7 +146,7 @@ Soft and hard limits implement different policies intentionally. A soft limit is
 
 Enforcement belongs in kernel space because user-space code cannot reliably monitor another process's RSS without a tight polling loop, which wastes CPU. The kernel already has accurate RSS information via `get_mm_rss()` and can send signals atomically without a race between the check and the kill. A kernel timer fires every second, locks the list, and applies the policy to each entry — this is far more efficient than user-space polling.
 
-### 4.5 Scheduling Behavior
+### Scheduling Behavior
 
 The Linux Completely Fair Scheduler (CFS) assigns CPU time proportional to a weight derived from the process's `nice` value. A nice value of -5 gives roughly 3× the weight of nice 5. In Experiment A, the container with `--nice -5` receives a larger share of CPU cycles, so its `cpu_hog` workload completes noticeably faster than the container at `--nice 5`.
 
@@ -203,7 +154,7 @@ In Experiment B, the CFS correctly identifies the I/O-bound container as a high-
 
 ---
 
-## 5. Design Decisions and Tradeoffs
+## Design Decisions and Tradeoffs
 
 ### Namespace Isolation
 **Choice:** `CLONE_NEWPID | CLONE_NEWUTS | CLONE_NEWNS` with `chroot()`.  
@@ -232,7 +183,7 @@ In Experiment B, the CFS correctly identifies the I/O-bound container as a high-
 
 ---
 
-## 6. Scheduler Experiment Results
+## Scheduler Experiment Results
 
 ### Experiment A: Two CPU-bound containers at different priorities
 
@@ -241,7 +192,7 @@ In Experiment B, the CFS correctly identifies the I/O-bound container as a high-
 | cpu\_hi   | -5        | 20 s            | ~14 s wall time              |
 | cpu\_lo   | +5        | 20 s            | ~28 s wall time              |
 
-**Interpretation:** CFS weight for nice -5 is ~3.5× the weight for nice +5. `cpu_hi` therefore receives ~78% of total CPU time when both are runnable, completing in roughly half the wall time of `cpu_lo`. This confirms CFS proportional scheduling.
+**Interpretation:** CFS weight for nice -5 is ~3.5X the weight for nice +5. `cpu_hi` therefore receives ~78% of total CPU time when both are runnable, completing in roughly half the wall time of `cpu_lo`. This confirms CFS proportional scheduling.
 
 ### Experiment B: CPU-bound vs I/O-bound at equal priority
 
@@ -252,3 +203,6 @@ In Experiment B, the CFS correctly identifies the I/O-bound container as a high-
 
 **Interpretation:** CFS tracks `vruntime` (virtual runtime). The I/O-bound task accumulates little `vruntime` while sleeping, so when it wakes it has the smallest `vruntime` in the run queue and is scheduled next. This gives I/O-bound tasks low latency without explicit priority boosts — an emergent property of CFS's design.
 
+*Author*
+
+*Rekha Dhorigol*
