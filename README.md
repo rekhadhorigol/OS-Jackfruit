@@ -202,7 +202,3 @@ In Experiment B, the CFS correctly identifies the I/O-bound container as a high-
 | io\_work  | I/O-bound | most time sleeping; each `fsync` woke immediately |
 
 **Interpretation:** CFS tracks `vruntime` (virtual runtime). The I/O-bound task accumulates little `vruntime` while sleeping, so when it wakes it has the smallest `vruntime` in the run queue and is scheduled next. This gives I/O-bound tasks low latency without explicit priority boosts — an emergent property of CFS's design.
-
-*Author*
-
-*Rekha Dhorigol*
